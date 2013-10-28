@@ -79,27 +79,17 @@ class TinyStageDBSync
 
 	public static function setup( $config )
 	{
+		self::$left = new TinyStageDB( $config->left );
+
+		self::$right = new TinyStageDB( $config->right );
+
 		self::$config = $config;
-
-		self::$left = new PDO(
-			self::$config->left->dsn,
-			self::$config->left->user,
-			self::$config->left->password,
-			array(PDO::ATTR_PERSISTENT => true)
-		);
-
-		self::$right = new PDO(
-			self::$config->right->dsn,
-			self::$config->right->user,
-			self::$config->right->password,
-			array(PDO::ATTR_PERSISTENT => true)
-		);
 	}
 
 	public static function sync()
 	{
-		$left = self::$left->query( 'show table status from'.self::$config->left->db );
-		$right = self::$right->query( 'show table status from'.self::$config->right->db );
+		$left = self::$left->tableStatus();
+		$right = self::$right->tableStatus();
 
 		// Keep an offset in case right table has a reduced table set
 		$offset = 0;
@@ -124,6 +114,10 @@ class TinyStageDBSync
 			if ( !$right_exists ) continue;
 
 			// Check whether there actually are any recent changes
+			if ( $left_table['Update_time'] == $right_table['Update_time'] ) {
+				continue;
+			}
+
 			if ( $left_table['Update_time'] == $right_table['Update_time'] ) {
 				continue;
 			}
@@ -184,9 +178,36 @@ class TinyStageDBSync
 
 	}
 
+	private static function correspondingTable( $left_table )
+	{
+
+	}
+
 	public static function close()
 	{
 		self::$left = null;
 		self::$right = null;
+	}
+}
+
+class TinyStageDB
+{
+	private static $dbname;
+
+	public function __construct( $config )
+	{
+		self::$dbname = $config->db;
+
+		parent::__construct(
+			$config->dsn,
+			$config->user,
+			$config->password,
+			array(PDO::ATTR_PERSISTENT => true)
+		);
+	}
+
+	public function tableStatus()
+	{
+		$this->query( 'show table status from'.self::$dbname );
 	}
 }

@@ -6,6 +6,8 @@ class TinyStage
 {
 	private static $config;
 
+	public static $last_update;
+
 	public static function go()
 	{
 		self::loadConfig();
@@ -26,6 +28,12 @@ class TinyStage
 		}
 
 		self::$config = json_decode( file_get_contents(__DIR__.'/../config.json') );
+
+		if ( isset( self::$config->last_update ) ) {
+			self::$last_update = self::$config->last_update;
+		} else {
+			self::$last_update = (int) gmdate('U', 0);
+		}
 	}
 
 	private static function storeConfig()
@@ -33,6 +41,8 @@ class TinyStage
 		if ( !empty( TinyStageDBSync::$intel ) ) {
 			self::$config->db->intel = TinyStageDBSync::$intel;
 		}
+
+		self::$config->last_update = (int) gmdate('U');
 
 		file_put_contents( __DIR__.'/../config.json', json_encode(self::$config) );
 	}
@@ -58,6 +68,8 @@ class TinyStage
 		TinyStageDBSync::setup( self::$config->db );
 
 		TinyStageDBSync::sync();
+
+		TinyStageDBSync::close();
 	}
 
 	private static function authError()
@@ -70,10 +82,15 @@ class TinyStageDBSync
 {
 	private static $config;
 
+	/**
+	 * @var TinyStageDB
+	 */
 	private static $left;
-	private static $right;
 
-	private static $offset;
+	/**
+	 * @var TinyStageDB
+	 */
+	private static $right;
 
 	public static $intel;
 
@@ -88,66 +105,23 @@ class TinyStageDBSync
 
 	public static function sync()
 	{
-		$left = self::$left->tableStatus();
-		$right = self::$right->tableStatus();
+		foreach ( self::$left->tables as $left_table ) {
+			$right_table = self::$right->tables->find( $left_table->name );
 
-		// Keep an offset in case right table has a reduced table set
-		$offset = 0;
-		foreach ( $left as $i => $left_table ) {
-			$right_table = null;
-			$right_exists = false;
+			if ( !$right_table ) continue;
 
-			if ( $left_table['Name'] !== $right[$i+$offset]['Name'] ) {
-				foreach ( $right as $j => $right_table ) {
-					if ( $left_table['Name'] != $right_table['Name'] ) continue;
+			if ( !self::hasUpdates( $left_table, $right_table ) ) continue;
 
-					$offset = $j-$i;
-
-					$right_exists = true;
-				}
-			} else {
-				$right_table = $right[$i+$offset];
-
-				$right_exists = true;
-			}
-
-			if ( !$right_exists ) continue;
-
-			// Check whether there actually are any recent changes
-			if ( $left_table['Update_time'] == $right_table['Update_time'] ) {
-				continue;
-			}
-
-			if ( $left_table['Update_time'] == $right_table['Update_time'] ) {
-				continue;
-			}
-
-			$q = $db_left->prepare('DESCRIBE '.$left_table['Name']);
-			$q->execute();
-
-			$table_fields = $q->fetchAll(PDO::FETCH_COLUMN);
+			$table_fields = self::getFields($left_table);
 
 			$table_id = array_shift($table_fields)['Field'];
 
 			// Prepare statements for selecting and inserting entries
-			$stmt_left = $db_left->prepare(
-				'SELECT * FROM '.$left_table['Name']
-			);
+			$stmt_left = self::$left->prepareSelect( $left_table );
 
-			$stmt_right = $db_right->prepare(
-				'SELECT * FROM '.$left_table['Name']
-				.' WHERE '.$table_id.'=:'.$table_id
-			);
+			$stmt_right = self::$right->prepareSelect( $left_table, $table_id );
 
-			$inserts = array();
-			foreach ( $table_fields as $field ) {
-				$inserts[] = $field['Field'].'=:'.$field['Field'];
-			}
-
-			$stmt_update = $db_right->prepare(
-				'UPDATE '.$left_table['Name']
-				.' SET '.implode(', ', $inserts)
-			);
+			$stmt_update = self::$right->prepareUpdate( $right_table, $table_fields );
 
 			if (!$stmt_left->execute()) continue;
 
@@ -178,9 +152,32 @@ class TinyStageDBSync
 
 	}
 
-	private static function correspondingTable( $left_table )
+	private static function hasUpdates( $left, $right )
 	{
+		// Check whether there actually are any recent changes
+		if ( $left->update_time == $right->update_time ) {
+			return false;
+		}
 
+		// Check whether the updates happened since the last TinyStage Update
+		if ( $left->update_time > TinyStage::$last_update ) {
+			return true;
+		}
+
+		if ( $right->update_time > TinyStage::$last_update ) {
+			return true;
+		}
+
+		return false;
+	}
+
+	private static function getFields( $table )
+	{
+		$q = self::$left->prepare('describe '.$table->name);
+
+		$q->execute();
+
+		return $q->fetchAll(PDO::FETCH_COLUMN);
 	}
 
 	public static function close()
@@ -190,15 +187,15 @@ class TinyStageDBSync
 	}
 }
 
-class TinyStageDB
+class TinyStageDB extends PDO
 {
-	private $dbname;
+	private $name;
 
 	public $tables;
 
 	public function __construct( $config )
 	{
-		$this->dbname = $config->db;
+		$this->name = $config->db;
 
 		parent::__construct(
 			$config->dsn,
@@ -208,7 +205,30 @@ class TinyStageDB
 		);
 
 		$this->tables = new TinyStageDBTableIterator(
-			$this->query( 'show table status from'.$this->dbname )
+			$this->query( 'show table status from'.$this->name )
+		);
+	}
+
+	public function prepareSelect( $table, $id=null )
+	{
+		if ( empty($id) ) {
+			return $this->prepare('SELECT * FROM '.$table->name);
+		} else {
+			return $this->prepare(
+				'SELECT * FROM '.$table->name.' WHERE '.$id.'=:'.$id
+			);
+		}
+	}
+
+	public function prepareUpdate( $table, $fields )
+	{
+		$inserts = array();
+		foreach ( $fields as $field ) {
+			$inserts[] = $field['Field'].'=:'.$field['Field'];
+		}
+
+		return $this->prepare(
+			'UPDATE '.$table->name.' SET '.implode(', ', $inserts)
 		);
 	}
 }
@@ -219,10 +239,36 @@ class TinyStageDBTableIterator extends ArrayIterator
 	{
 		$converted = array();
 		foreach ( $array as $table ) {
-			$converted[$table['Name']] = new TinyStageDBTable( $table );
+			$converted[] = new TinyStageDBTable( $table );
 		}
 
 		parent::__construct( $converted );
+	}
+
+	public function find( $name )
+	{
+		// First check whether the current entry is the one we're looking for
+		if ( $this->current()->name == $name ) {
+			return $this->current();
+		}
+
+		// If not try the next
+		$this->next();
+
+		if ( $this->current()->name == $name ) {
+			return $this->current();
+		}
+
+		// Otherwise start from the beginning
+		$this->rewind();
+
+		while( $this->valid() ) {
+			if ( $this->current()->name == $name ) {
+				return $this->current();
+			}
+		}
+
+		return false;
 	}
 }
 
@@ -234,4 +280,5 @@ class TinyStageDBTable
 			$this->{strtolower($k)} = $v;
 		}
 	}
+
 }

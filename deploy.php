@@ -212,32 +212,32 @@ class TinyStageDB extends PDO
 	public function prepareSelect( $table, $id=null )
 	{
 		if ( empty($id) ) {
-			return $this->prepare('SELECT * FROM '.$table->name);
+			return $this->prepare(
+				'select * from '.$table->name
+			);
 		} else {
 			return $this->prepare(
-				'SELECT * FROM '.$table->name.' WHERE '.$id.'=:'.$id
+				'select * from '.$table->name.' where '.$id.'=:'.$id
 			);
 		}
 	}
 
-	public function prepareUpdate( $table, $fields )
+	public function prepareUpdate( $table, $fields, $inserts=array() )
 	{
-		$inserts = array();
 		foreach ( $fields as $field ) {
 			$inserts[] = $field['Field'].'=:'.$field['Field'];
 		}
 
 		return $this->prepare(
-			'UPDATE '.$table->name.' SET '.implode(', ', $inserts)
+			'update '.$table->name.' set '.implode(', ', $inserts)
 		);
 	}
 }
 
 class TinyStageDBTableIterator extends ArrayIterator
 {
-	public function __construct( $array, $flags=0 )
+	public function __construct( $array, $flags=0, $converted=array() )
 	{
-		$converted = array();
 		foreach ( $array as $table ) {
 			$converted[] = new TinyStageDBTable( $table );
 		}

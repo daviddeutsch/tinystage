@@ -42,26 +42,46 @@ class TinyStage
 		shell_exec( 'git pull origin ' . self::$config->branch );
 	}
 
-	public static function syncDB()
+	private static function syncDB()
 	{
-		$dbc = self::$config->db;
+		TinyStageDBSync::setup( self::$config->db );
 
-		$db_left = new PDO(
-			$dbc->left->dsn,
-			$dbc->left->user,
-			$dbc->left->password,
+		TinyStageDBSync::sync();
+	}
+}
+
+class TinyStageDBSync
+{
+	private static $config;
+
+	private static $left;
+	private static $right;
+
+	private static $offset;
+
+	public static function setup( $config )
+	{
+		self::$config = $config;
+
+		self::$left = new PDO(
+			self::$config->left->dsn,
+			self::$config->left->user,
+			self::$config->left->password,
 			array(PDO::ATTR_PERSISTENT => true)
 		);
 
-		$db_right = new PDO(
-			$dbc->right->dsn,
-			$dbc->right->user,
-			$dbc->right->password,
+		self::$right = new PDO(
+			self::$config->right->dsn,
+			self::$config->right->user,
+			self::$config->right->password,
 			array(PDO::ATTR_PERSISTENT => true)
 		);
+	}
 
-		$left = $db_left->query( 'show table status from'.$dbc->left->db );
-		$right = $db_right->query( 'show table status from'.$dbc->right->db );
+	public static function sync()
+	{
+		$left = self::$left->query( 'show table status from'.self::$config->left->db );
+		$right = self::$right->query( 'show table status from'.self::$config->right->db );
 
 		// Keep an offset in case right table has a reduced table set
 		$offset = 0;
@@ -95,7 +115,7 @@ class TinyStage
 
 			$table_fields = $q->fetchAll(PDO::FETCH_COLUMN);
 
-			$table_id = array_shift($table_fields);
+			$table_id = array_shift($table_fields)['Field'];
 
 			// Prepare statements for selecting and inserting entries
 			$stmt_left = $db_left->prepare(
@@ -109,7 +129,7 @@ class TinyStage
 
 			$inserts = array();
 			foreach ( $table_fields as $field ) {
-				$inserts[] = $field.'=:'.$field;
+				$inserts[] = $field['Field'].'=:'.$field['Field'];
 			}
 
 			$stmt_update = $db_right->prepare(
@@ -137,15 +157,18 @@ class TinyStage
 				if ( $same ) continue;
 
 				foreach ( $table_fields as $field ) {
-					$stmt_update->bindValue(":".$field, $field);
+					$stmt_update->bindValue(":".$field['Field'], $field['Field']);
 				}
 
 				$stmt_update->execute();
 			}
 		}
 
-		// Close connections
-		$db_left = null;
-		$db_right = null;
+	}
+
+	public static function close()
+	{
+		self::$left = null;
+		self::$right = null;
 	}
 }

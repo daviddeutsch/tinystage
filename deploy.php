@@ -15,29 +15,40 @@ class TinyStage
 		self::gitPull();
 
 		self::syncDB();
+
+		self::storeConfig();
 	}
 
-	public static function loadConfig()
+	private static function loadConfig()
 	{
 		if ( !file_exists( __DIR__.'/../config.json' ) ) {
-			header("HTTP/1.0 401 Unauthorized"); exit;
+			self::authError();
 		}
 
 		self::$config = json_decode( file_get_contents(__DIR__.'/../config.json') );
 	}
 
-	public static function checkAuth()
+	private static function storeConfig()
+	{
+		if ( !empty( TinyStageDBSync::$intel ) ) {
+			self::$config->db->intel = TinyStageDBSync::$intel;
+		}
+
+		file_put_contents( __DIR__.'/../config.json', json_encode(self::$config) );
+	}
+
+	private static function checkAuth()
 	{
 		if ( !isset( $_GET['auth'] ) || !isset( self::$config->auth ) ) {
-			header("HTTP/1.0 401 Unauthorized"); exit;
+			self::authError();
 		}
 
 		if ( $_GET['auth'] != self::$config->auth ) {
-			header("HTTP/1.0 401 Unauthorized"); exit;
+			self::authError();
 		}
 	}
 
-	public static function gitPull()
+	private static function gitPull()
 	{
 		shell_exec( 'git pull origin ' . self::$config->branch );
 	}
@@ -47,6 +58,11 @@ class TinyStage
 		TinyStageDBSync::setup( self::$config->db );
 
 		TinyStageDBSync::sync();
+	}
+
+	private static function authError()
+	{
+		header("HTTP/1.0 401 Unauthorized"); exit;
 	}
 }
 
@@ -58,6 +74,8 @@ class TinyStageDBSync
 	private static $right;
 
 	private static $offset;
+
+	public static $intel;
 
 	public static function setup( $config )
 	{

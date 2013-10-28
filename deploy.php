@@ -29,7 +29,7 @@ class TinyStage
 
 	private static function loadConfig()
 	{
-		if ( !file_exists( __DIR__.'/../config.json' ) ) {
+		if ( !file_exists(__DIR__.'/../config.json') ) {
 			self::authError();
 		}
 
@@ -44,10 +44,6 @@ class TinyStage
 
 	private static function storeConfig()
 	{
-		if ( !empty( TinyStageDBSync::$intel ) ) {
-			self::$config->db->intel = TinyStageDBSync::$intel;
-		}
-
 		self::$config->last_update = (int) gmdate('U');
 
 		file_put_contents( __DIR__.'/../config.json', json_encode(self::$config) );
@@ -55,7 +51,7 @@ class TinyStage
 
 	private static function checkAuth()
 	{
-		if ( !isset( $_GET['auth'] ) || !isset( self::$config->auth ) ) {
+		if ( !isset($_GET['auth']) || !isset(self::$config->auth) ) {
 			self::authError();
 		}
 
@@ -117,9 +113,9 @@ class TinyStageDBSync
 
 			if ( !$rt ) continue;
 
-			if ( !self::hasUpdates( $lt, $rt ) ) continue;
+			if ( !self::hasUpdates($lt, $rt) ) continue;
 
-			if (!$lt::$select->execute()) continue;
+			if ( !$lt::$select->execute() ) continue;
 
 			while ( $lt_row = $lt::$select->fetch(PDO::FETCH_ASSOC) ) {
 				$rt_row = $rt::fetchRow( $lt_row[$lt::$tableId] );
@@ -153,11 +149,10 @@ class TinyStageDBSync
 		}
 
 		// Check whether the updates happened since the last TinyStage Update
-		if ( $left->update_time > TinyStage::$last_update ) {
-			return true;
-		}
-
-		if ( $right->update_time > TinyStage::$last_update ) {
+		if (
+			( $left->update_time > TinyStage::$last_update )
+			|| ( $right->update_time > TinyStage::$last_update )
+		) {
 			return true;
 		}
 
@@ -199,7 +194,10 @@ class TinyStageDB extends PDO
 
 	public function getTableStatus()
 	{
-		return $this->query( 'show table status from'.$this->name );
+		return $this->query(
+			'show table status from'.$this->name,
+			PDO::FETCH_OBJ
+		)->fetch();
 	}
 
 	public function prepareSelect( $table, $id=null )
@@ -210,7 +208,7 @@ class TinyStageDB extends PDO
 			);
 		} else {
 			return $this->prepare(
-				'select * from '.$table->name.' where '.$id.'=:'.$id
+				'select * from '.$table->name.' where '.$id.' = :'.$id
 			);
 		}
 	}
@@ -218,7 +216,7 @@ class TinyStageDB extends PDO
 	public function prepareUpdate( $table, $fields, $inserts=array() )
 	{
 		foreach ( $fields as $field ) {
-			$inserts[] = $field['Field'].'=:'.$field['Field'];
+			$inserts[] = $field['Field'].' = :'.$field['Field'];
 		}
 
 		return $this->prepare(
@@ -255,10 +253,12 @@ class TinyStageDBTableIterator extends ArrayIterator
 		// Otherwise start from the beginning
 		$this->rewind();
 
-		while( $this->valid() ) {
+		while ( $this->valid() ) {
 			if ( $this->current()->name == $name ) {
 				return $this->current();
 			}
+
+			$this->next();
 		}
 
 		return false;
@@ -330,11 +330,7 @@ class TinyStageDBTable
 
 	private function getFields( TinyStageDB $db )
 	{
-		$q = $db->prepare('describe '.$this->name);
-
-		$q->execute();
-
-		return $q->fetchAll(PDO::FETCH_COLUMN);
+		return $db->query('describe '.$this->name, PDO::FETCH_OBJ)->fetch();
 	}
 
 }

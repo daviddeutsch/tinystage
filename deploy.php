@@ -4,8 +4,14 @@ TinyStage::go();
 
 class TinyStage
 {
+	/**
+	 * @var stdClass
+	 */
 	private static $config;
 
+	/**
+	 * @var int timestamp
+	 */
 	public static $last_update;
 
 	public static function go()
@@ -80,6 +86,9 @@ class TinyStage
 
 class TinyStageDBSync
 {
+	/**
+	 * @var stdClass
+	 */
 	private static $config;
 
 	/**
@@ -92,8 +101,6 @@ class TinyStageDBSync
 	 */
 	private static $right;
 
-	public static $intel;
-
 	public static function setup( $config )
 	{
 		self::$left = new TinyStageDB( $config->left );
@@ -105,35 +112,21 @@ class TinyStageDBSync
 
 	public static function sync()
 	{
-		foreach ( self::$left->tables as $left_table ) {
-			$right_table = self::$right->tables->find( $left_table->name );
+		foreach ( self::$left->tables as $lt ) {
+			$rt = self::$right->tables->find( $lt->name );
 
-			if ( !$right_table ) continue;
+			if ( !$rt ) continue;
 
-			if ( !self::hasUpdates( $left_table, $right_table ) ) continue;
+			if ( !self::hasUpdates( $lt, $rt ) ) continue;
 
-			$table_fields = self::getFields($left_table);
+			if (!$lt::$select->execute()) continue;
 
-			$table_id = array_shift($table_fields)['Field'];
-
-			// Prepare statements for selecting and inserting entries
-			$stmt_left = self::$left->prepareSelect( $left_table );
-
-			$stmt_right = self::$right->prepareSelect( $left_table, $table_id );
-
-			$stmt_update = self::$right->prepareUpdate( $right_table, $table_fields );
-
-			if (!$stmt_left->execute()) continue;
-
-			while ($left_row = $stmt_left->fetch(PDO::FETCH_ASSOC)) {
-				$stmt_right->bindValue(":".$table_id, $left_row[$table_id]);
-				$stmt_right->execute();
-
-				$right_row = $stmt_right->fetch(PDO::FETCH_ASSOC);
+			while ( $lt_row = $lt::$select->fetch(PDO::FETCH_ASSOC) ) {
+				$rt_row = $rt::fetchRow( $lt_row[$lt::$tableId] );
 
 				$same = true;
-				foreach ( $left_row as $j => $left_field ) {
-					if ( $right_row[$j] !== $left_field ) {
+				foreach ( $lt_row as $j => $lt_field ) {
+					if ( $rt_row[$j] !== $lt_field ) {
 						$same = false;
 
 						break;
@@ -142,11 +135,11 @@ class TinyStageDBSync
 
 				if ( $same ) continue;
 
-				foreach ( $table_fields as $field ) {
-					$stmt_update->bindValue(":".$field['Field'], $field['Field']);
+				foreach ( $lt::$tableFields as $field ) {
+					$lt::$update->bindValue(":".$field['Field'], $field['Field']);
 				}
 
-				$stmt_update->execute();
+				$lt::$update->execute();
 			}
 		}
 
@@ -171,15 +164,6 @@ class TinyStageDBSync
 		return false;
 	}
 
-	private static function getFields( $table )
-	{
-		$q = self::$left->prepare('describe '.$table->name);
-
-		$q->execute();
-
-		return $q->fetchAll(PDO::FETCH_COLUMN);
-	}
-
 	public static function close()
 	{
 		self::$left = null;
@@ -189,8 +173,14 @@ class TinyStageDBSync
 
 class TinyStageDB extends PDO
 {
+	/**
+	 * @var string
+	 */
 	private $name;
 
+	/**
+	 * @var TinyStageDBTableIterator
+	 */
 	public $tables;
 
 	public function __construct( $config )
@@ -204,9 +194,12 @@ class TinyStageDB extends PDO
 			array(PDO::ATTR_PERSISTENT => true)
 		);
 
-		$this->tables = new TinyStageDBTableIterator(
-			$this->query( 'show table status from'.$this->name )
-		);
+		$this->tables = new TinyStageDBTableIterator( $this );
+	}
+
+	public function getTableStatus()
+	{
+		return $this->query( 'show table status from'.$this->name );
 	}
 
 	public function prepareSelect( $table, $id=null )
@@ -236,10 +229,10 @@ class TinyStageDB extends PDO
 
 class TinyStageDBTableIterator extends ArrayIterator
 {
-	public function __construct( $array, $flags=0, $converted=array() )
+	public function __construct( TinyStageDB $db, $converted=array() )
 	{
-		foreach ( $array as $table ) {
-			$converted[] = new TinyStageDBTable( $table );
+		foreach ( self::$db->getTableStatus() as $table ) {
+			$converted[] = new TinyStageDBTable( $table, $db );
 		}
 
 		parent::__construct( $converted );
@@ -274,11 +267,74 @@ class TinyStageDBTableIterator extends ArrayIterator
 
 class TinyStageDBTable
 {
-	public function __construct( $data )
+	/**
+	 * @var string
+	 */
+	public $name;
+
+	/**
+	 * @var PDOStatement
+	 */
+	public static $select;
+
+	/**
+	 * @var PDOStatement
+	 */
+	public static $selectId;
+
+	/**
+	 * @var PDOStatement
+	 */
+	public static $update;
+
+	/**
+	 * @var array
+	 */
+	public static $tableFields;
+
+	/**
+	 * @var string
+	 */
+	public static $tableId;
+
+	public function __construct( $data, TinyStageDB $db )
 	{
 		foreach ( $data as $k => $v ) {
 			$this->{strtolower($k)} = $v;
 		}
+
+		self::$tableFields = self::getFields($db);
+
+		self::$tableId = self::getId($db);
+
+		// Prepare statements for selecting and inserting entries
+		self::$select = $db->prepareSelect( $this );
+
+		self::$selectId = $db->prepareSelect( $this, self::$tableId );
+
+		self::$update = $db->prepareUpdate( $this, self::$tableFields );
+	}
+
+	public function fetchRow( $id )
+	{
+		self::$select->bindValue(":".self::$tableId, $id);
+		self::$select->execute();
+
+		return self::$select->fetch(PDO::FETCH_ASSOC);
+	}
+
+	private function getId()
+	{
+		return array_shift(self::$tableFields)['Field'];
+	}
+
+	private function getFields( TinyStageDB $db )
+	{
+		$q = $db->prepare('describe '.$this->name);
+
+		$q->execute();
+
+		return $q->fetchAll(PDO::FETCH_COLUMN);
 	}
 
 }

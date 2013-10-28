@@ -192,11 +192,13 @@ class TinyStageDBSync
 
 class TinyStageDB
 {
-	private static $dbname;
+	private $dbname;
+
+	public $tables;
 
 	public function __construct( $config )
 	{
-		self::$dbname = $config->db;
+		$this->dbname = $config->db;
 
 		parent::__construct(
 			$config->dsn,
@@ -204,10 +206,32 @@ class TinyStageDB
 			$config->password,
 			array(PDO::ATTR_PERSISTENT => true)
 		);
-	}
 
-	public function tableStatus()
+		$this->tables = new TinyStageDBTableIterator(
+			$this->query( 'show table status from'.$this->dbname )
+		);
+	}
+}
+
+class TinyStageDBTableIterator extends ArrayIterator
+{
+	public function __construct( $array, $flags=0 )
 	{
-		$this->query( 'show table status from'.self::$dbname );
+		$converted = array();
+		foreach ( $array as $table ) {
+			$converted[$table['Name']] = new TinyStageDBTable( $table );
+		}
+
+		parent::__construct( $converted );
+	}
+}
+
+class TinyStageDBTable
+{
+	public function __construct( $data )
+	{
+		foreach ( $data as $k => $v ) {
+			$this->{strtolower($k)} = $v;
+		}
 	}
 }

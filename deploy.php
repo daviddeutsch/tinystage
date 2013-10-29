@@ -129,8 +129,8 @@ class tsDBSync
 
 		// Check whether the updates happened since the last ts Update
 		if (
-			( $left->update_time > ts::$last_update )
-			|| ( $right->update_time > ts::$last_update )
+			( $left->update_time > TinyStage::$last_update )
+			|| ( $right->update_time > TinyStage::$last_update )
 		) {
 			return true;
 		}
@@ -265,7 +265,7 @@ class tsDBSyncIterator implements Iterator
 	public function current()
 	{
 		return (object) array(
-			'left' =>$this->left->current(),
+			'left' => $this->left->current(),
 			'right' => $this->right->current()
 		);
 	}
@@ -273,7 +273,7 @@ class tsDBSyncIterator implements Iterator
 	public function key()
 	{
 		return (object) array(
-			'left' =>$this->left->key(),
+			'left' => $this->left->key(),
 			'right' => $this->right->key()
 		);
 	}
@@ -312,8 +312,8 @@ class tsDBSyncIterator implements Iterator
 
 		// Check whether the updates happened since the last TinyStage Update
 		if (
-			( $this->left->current()->update_time > ts::$last_update )
-			|| ( $this->right->current()->update_time > ts::$last_update )
+			( $this->left->current()->update_time > TinyStage::$last_update )
+			|| ( $this->right->current()->update_time > TinyStage::$last_update )
 		) {
 			return true;
 		}
@@ -403,10 +403,10 @@ class tsDBTable
 
 	public function fetchRow( $id )
 	{
-		self::$select->bindValue(":".self::$tableId, $id);
-		self::$select->execute();
+		self::$selectId->bindValue(":".self::$tableId, $id);
+		self::$selectId->execute();
 
-		return self::$select->fetch(PDO::FETCH_ASSOC);
+		return self::$selectId->fetch(PDO::FETCH_ASSOC);
 	}
 
 	private function getId()

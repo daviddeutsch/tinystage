@@ -320,27 +320,27 @@ class tsDBTable
 	/**
 	 * @var PDOStatement
 	 */
-	public static $select;
+	public $select;
 
 	/**
 	 * @var PDOStatement
 	 */
-	public static $selectId;
+	public $selectId;
 
 	/**
 	 * @var PDOStatement
 	 */
-	public static $update;
+	public $update;
 
 	/**
 	 * @var array
 	 */
-	public static $tableFields;
+	public $fields;
 
 	/**
 	 * @var string
 	 */
-	public static $tableId;
+	public $id;
 
 	public function __construct( $data, tsDB $db )
 	{
@@ -348,29 +348,29 @@ class tsDBTable
 			$this->{strtolower($k)} = $v;
 		}
 
-		self::$tableFields = self::getFields($db);
+		$this->fields = $this->getFields($db);
 
-		self::$tableId = self::getId($db);
+		$this->id = $this->getId($db);
 
 		// Prepare statements for selecting and inserting entries
-		self::$select = $db->prepareSelect( $this );
+		$this->select = $db->prepareSelect( $this );
 
-		self::$selectId = $db->prepareSelect( $this, self::$tableId );
+		$this->selectId = $db->prepareSelect( $this, $this->id );
 
-		self::$update = $db->prepareUpdate( $this, self::$tableFields );
+		$this->update = $db->prepareUpdate( $this, $this->fields );
 	}
 
-	public function fetchRow( $id )
+	private function fetchRow( $id )
 	{
-		self::$selectId->bindValue(":".self::$tableId, $id);
-		self::$selectId->execute();
+		$this->selectId->bindValue(":".$this->id, $id);
+		$this->selectId->execute();
 
-		return self::$selectId->fetch(PDO::FETCH_ASSOC);
+		return $this->selectId->fetch(PDO::FETCH_ASSOC);
 	}
 
 	private function getId()
 	{
-		return array_shift(self::$tableFields)['Field'];
+		return array_shift($this->fields)['Field'];
 	}
 
 	private function getFields( tsDB $db )
@@ -378,12 +378,12 @@ class tsDBTable
 		return $db->query('describe '.$this->name, PDO::FETCH_OBJ)->fetch();
 	}
 
-	public static function sync( tsDBTable $right )
+	public function sync( tsDBTable $right )
 	{
-		if ( !self::$select->execute() ) return;
+		if ( !$this->select->execute() ) return;
 
-		while ( $row = self::$select->fetch(PDO::FETCH_ASSOC) ) {
-			$right_row = $right->fetchRow( $row[self::$tableId] );
+		while ( $row = $this->select->fetch(PDO::FETCH_ASSOC) ) {
+			$right_row = $right->fetchRow( $row[$this->id] );
 
 			$same = true;
 			foreach ( $row as $j => $field ) {
@@ -396,11 +396,11 @@ class tsDBTable
 
 			if ( $same ) continue;
 
-			foreach ( self::$tableFields as $field ) {
-				self::$update->bindValue(":".$field['Field'], $field['Field']);
+			foreach ( $this->fields as $field ) {
+				$this->update->bindValue(":".$field['Field'], $field['Field']);
 			}
 
-			self::$update->execute();
+			$this->update->execute();
 		}
 	}
 }

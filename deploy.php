@@ -120,24 +120,6 @@ class tsDBSync
 		}
 	}
 
-	private static function hasUpdates( $left, $right )
-	{
-		// Check whether there actually are any recent changes
-		if ( $left->update_time == $right->update_time ) {
-			return false;
-		}
-
-		// Check whether the updates happened since the last ts Update
-		if (
-			( $left->update_time > TinyStage::$last_update )
-			|| ( $right->update_time > TinyStage::$last_update )
-		) {
-			return true;
-		}
-
-		return false;
-	}
-
 	public static function close()
 	{
 		self::$left = null;
@@ -290,7 +272,7 @@ class tsDBSyncIterator implements Iterator
 			return false;
 		}
 
-		if ( $this->hasUpdates() ) {
+		if ( !$this->hasUpdates() ) {
 			return false;
 		}
 

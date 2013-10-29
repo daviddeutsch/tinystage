@@ -190,7 +190,7 @@ class tsDBTableIterator extends ArrayIterator
 {
 	public function __construct( tsDB $db, $converted=array() )
 	{
-		foreach ( self::$db->getTableStatus() as $table ) {
+		foreach ( $db->getTableStatus() as $table ) {
 			$converted[] = new tsDBTable( $table, $db );
 		}
 
@@ -227,12 +227,12 @@ class tsDBTableIterator extends ArrayIterator
 
 	public function equalTime( tsDBTableIterator $other )
 	{
-		return $this->current()->update_time == $other->current()->update_time;
+		return $this->current()->updated == $other->current()->updated;
 	}
 
 	public function hasUpdate()
 	{
-		return $this->current()->update_time > TinyStage::$last_update;
+		return $this->current()->updated > TinyStage::$last_update;
 	}
 }
 
@@ -257,7 +257,7 @@ class tsDBSyncIterator implements Iterator
 	public function current()
 	{
 		return (object) array(
-			'left' => $this->l->current(),
+			'left'  => $this->l->current(),
 			'right' => $this->r->current()
 		);
 	}
@@ -265,7 +265,7 @@ class tsDBSyncIterator implements Iterator
 	public function key()
 	{
 		return (object) array(
-			'left' => $this->l->key(),
+			'left'  => $this->l->key(),
 			'right' => $this->r->key()
 		);
 	}
@@ -318,35 +318,51 @@ class tsDBTable
 	public $name;
 
 	/**
-	 * @var PDOStatement
+	 * @var int
 	 */
-	public $select;
+	public $created;
+
+	/**
+	 * @var int
+	 */
+	public $updated;
 
 	/**
 	 * @var PDOStatement
 	 */
-	public $selectId;
+	private $select;
 
 	/**
 	 * @var PDOStatement
 	 */
-	public $update;
+	private $selectId;
+
+	/**
+	 * @var PDOStatement
+	 */
+	private $update;
 
 	/**
 	 * @var array
 	 */
-	public $fields;
+	private $fields;
 
 	/**
 	 * @var string
 	 */
-	public $id;
+	private $id;
 
 	public function __construct( $data, tsDB $db )
 	{
 		foreach ( $data as $k => $v ) {
-			$this->{strtolower($k)} = $v;
+			$this->fields[$k] = $v;
 		}
+
+		$this->name = $data['Name'];
+
+		$this->created = $data['Create_time'];
+
+		$this->updated = $data['Update_time'];
 
 		$this->fields = $this->getFields($db);
 

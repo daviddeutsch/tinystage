@@ -231,44 +231,44 @@ class tsDBSyncIterator implements Iterator
 	/**
 	 * @var tsDBTableIterator
 	 */
-	private $left;
+	private $l;
 
 	/**
 	 * @var tsDBTableIterator
 	 */
-	private $right;
+	private $r;
 
 	public function __construct( $left, $right )
 	{
-		$this->left = $left;
-		$this->right = $right;
+		$this->l = $left;
+		$this->r = $right;
 	}
 
 	public function current()
 	{
 		return (object) array(
-			'left' => $this->left->current(),
-			'right' => $this->right->current()
+			'left' => $this->l->current(),
+			'right' => $this->r->current()
 		);
 	}
 
 	public function key()
 	{
 		return (object) array(
-			'left' => $this->left->key(),
-			'right' => $this->right->key()
+			'left' => $this->l->key(),
+			'right' => $this->r->key()
 		);
 	}
 
 	public function next()
 	{
-		$this->left->next();
-		$this->right->next();
+		$this->l->next();
+		$this->r->next();
 	}
 
 	public function valid()
 	{
-		if ( $this->right->find( $this->left->current()->name ) ) {
+		if ( $this->r->find( $this->l->current()->name ) ) {
 			return false;
 		}
 
@@ -276,26 +276,26 @@ class tsDBSyncIterator implements Iterator
 			return false;
 		}
 
-		return $this->left->valid() && $this->right->valid();
+		return $this->l->valid() && $this->r->valid();
 	}
 
 	public function rewind()
 	{
-		$this->left->rewind();
-		$this->right->rewind();
+		$this->l->rewind();
+		$this->r->rewind();
 	}
 
 	private function hasUpdates()
 	{
 		// Check whether there actually are any recent changes
-		if ( $this->left->current()->update_time == $this->right->current()->update_time ) {
+		if ( $this->l->current()->update_time == $this->r->current()->update_time ) {
 			return false;
 		}
 
 		// Check whether the updates happened since the last TinyStage Update
 		if (
-			( $this->left->current()->update_time > TinyStage::$last_update )
-			|| ( $this->right->current()->update_time > TinyStage::$last_update )
+			( $this->l->current()->update_time > TinyStage::$last_update )
+			|| ( $this->r->current()->update_time > TinyStage::$last_update )
 		) {
 			return true;
 		}

@@ -108,37 +108,16 @@ class TinyStageDBSync
 
 	public static function sync()
 	{
-		foreach ( self::$left->tables as $lt ) {
-			$rt = self::$right->tables->find( $lt->name );
+		$iterator = new TinyStageDBSyncIterator(
+			self::$left->tables,
+			self::$right->tables
+		);
 
-			if ( !$rt ) continue;
+		foreach ( $iterator as $entry ) {
+			if ( !$iterator->valid() ) continue;
 
-			if ( !self::hasUpdates($lt, $rt) ) continue;
-
-			if ( !$lt::$select->execute() ) continue;
-
-			while ( $lt_row = $lt::$select->fetch(PDO::FETCH_ASSOC) ) {
-				$rt_row = $rt::fetchRow( $lt_row[$lt::$tableId] );
-
-				$same = true;
-				foreach ( $lt_row as $j => $lt_field ) {
-					if ( $rt_row[$j] !== $lt_field ) {
-						$same = false;
-
-						break;
-					}
-				}
-
-				if ( $same ) continue;
-
-				foreach ( $lt::$tableFields as $field ) {
-					$lt::$update->bindValue(":".$field['Field'], $field['Field']);
-				}
-
-				$lt::$update->execute();
-			}
+			TinyStageDBTableSync::sync( $entry->left, $entry->right );
 		}
-
 	}
 
 	private static function hasUpdates( $left, $right )
@@ -240,14 +219,14 @@ class TinyStageDBTableIterator extends ArrayIterator
 	{
 		// First check whether the current entry is the one we're looking for
 		if ( $this->current()->name == $name ) {
-			return $this->current();
+			return true;
 		}
 
 		// If not try the next
 		$this->next();
 
 		if ( $this->current()->name == $name ) {
-			return $this->current();
+			return true;
 		}
 
 		// Otherwise start from the beginning
@@ -255,13 +234,120 @@ class TinyStageDBTableIterator extends ArrayIterator
 
 		while ( $this->valid() ) {
 			if ( $this->current()->name == $name ) {
-				return $this->current();
+				return true;
 			}
 
 			$this->next();
 		}
 
 		return false;
+	}
+}
+
+class TinyStageDBSyncIterator implements Iterator
+{
+	/**
+	 * @var TinyStageDBTableIterator
+	 */
+	private $left;
+
+	/**
+	 * @var TinyStageDBTableIterator
+	 */
+	private $right;
+
+	public function __construct( $left, $right )
+	{
+		$this->left = $left;
+		$this->right = $right;
+	}
+
+	public function current()
+	{
+		return (object) array(
+			'left' =>$this->left->current(),
+			'right' => $this->right->current()
+		);
+	}
+
+	public function key()
+	{
+		return (object) array(
+			'left' =>$this->left->key(),
+			'right' => $this->right->key()
+		);
+	}
+
+	public function next()
+	{
+		$this->left->next();
+		$this->right->next();
+	}
+
+	public function valid()
+	{
+		if ( $this->right->find( $this->left->current()->name ) ) {
+			return false;
+		}
+
+		if ( $this->hasUpdates() ) {
+			return false;
+		}
+
+		return $this->left->valid() && $this->right->valid();
+	}
+
+	public function rewind()
+	{
+		$this->left->rewind();
+		$this->right->rewind();
+	}
+
+	private function hasUpdates()
+	{
+		// Check whether there actually are any recent changes
+		if ( $this->left->current()->update_time == $this->right->current()->update_time ) {
+			return false;
+		}
+
+		// Check whether the updates happened since the last TinyStage Update
+		if (
+			( $this->left->current()->update_time > TinyStage::$last_update )
+			|| ( $this->right->current()->update_time > TinyStage::$last_update )
+		) {
+			return true;
+		}
+
+		return false;
+	}
+}
+
+class TinyStageDBTableSync
+{
+	public static function sync( TinyStageDBTable $left, TinyStageDBTable $right )
+	{
+		if ( !$left::$select->execute() ) return;
+
+		while ( $left_row = $left::$select->fetch(PDO::FETCH_ASSOC) ) {
+			$right_row = $right->fetchRow( $left_row[$left::$tableId] );
+
+			$same = true;
+			foreach ( $left_row as $j => $left_field ) {
+				if ( $right_row[$j] !== $left_field ) {
+					$same = false;
+
+					break;
+				}
+			}
+
+			if ( $same ) continue;
+
+			foreach ( $left::$tableFields as $field ) {
+				$left::$update->bindValue(":".$field['Field'], $field['Field']);
+			}
+
+			$left::$update->execute();
+		}
 	}
 }
 

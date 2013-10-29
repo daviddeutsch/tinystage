@@ -116,7 +116,7 @@ class tsDBSync
 		foreach ( $iterator as $entry ) {
 			if ( !$iterator->valid() ) continue;
 
-			tsDBTableSync::sync( $entry->left, $entry->right );
+			$entry->left->sync( $entry->right );
 		}
 	}
 
@@ -310,35 +310,6 @@ class tsDBSyncIterator implements Iterator
 	}
 }
 
-class tsDBTableSync
-{
-	public static function sync( tsDBTable $left, tsDBTable $right )
-	{
-		if ( !$left::$select->execute() ) return;
-
-		while ( $left_row = $left::$select->fetch(PDO::FETCH_ASSOC) ) {
-			$right_row = $right->fetchRow( $left_row[$left::$tableId] );
-
-			$same = true;
-			foreach ( $left_row as $j => $left_field ) {
-				if ( $right_row[$j] !== $left_field ) {
-					$same = false;
-
-					break;
-				}
-			}
-
-			if ( $same ) continue;
-
-			foreach ( $left::$tableFields as $field ) {
-				$left::$update->bindValue(":".$field['Field'], $field['Field']);
-			}
-
-			$left::$update->execute();
-		}
-	}
-}
-
 class tsDBTable
 {
 	/**
@@ -407,4 +378,29 @@ class tsDBTable
 		return $db->query('describe '.$this->name, PDO::FETCH_OBJ)->fetch();
 	}
 
+	public static function sync( tsDBTable $right )
+	{
+		if ( !self::$select->execute() ) return;
+
+		while ( $row = self::$select->fetch(PDO::FETCH_ASSOC) ) {
+			$right_row = $right->fetchRow( $row[self::$tableId] );
+
+			$same = true;
+			foreach ( $row as $j => $field ) {
+				if ( $right_row[$j] !== $field ) {
+					$same = false;
+
+					break;
+				}
+			}
+
+			if ( $same ) continue;
+
+			foreach ( self::$tableFields as $field ) {
+				self::$update->bindValue(":".$field['Field'], $field['Field']);
+			}
+
+			self::$update->execute();
+		}
+	}
 }

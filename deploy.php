@@ -67,11 +67,9 @@ class TinyStage
 
 	private static function syncDB()
 	{
-		tsDBSync::setup( self::$config->db );
+		$sync = new tsDBSync( self::$config->db );
 
-		tsDBSync::sync();
-
-		tsDBSync::close();
+		$sync->sync();
 	}
 
 	private static function authError()
@@ -85,32 +83,32 @@ class tsDBSync
 	/**
 	 * @var stdClass
 	 */
-	private static $config;
+	private $config;
 
 	/**
 	 * @var tsDB
 	 */
-	private static $left;
+	private $left;
 
 	/**
 	 * @var tsDB
 	 */
-	private static $right;
+	private $right;
 
-	public static function setup( $config )
+	public function __construct( $config )
 	{
-		self::$left = new tsDB( $config->left );
+		$this->left = new tsDB( $config->left );
 
-		self::$right = new tsDB( $config->right );
+		$this->right = new tsDB( $config->right );
 
-		self::$config = $config;
+		$this->config = $config;
 	}
 
-	public static function sync()
+	public function sync()
 	{
 		$iterator = new tsDBSyncIterator(
-			self::$left->tables,
-			self::$right->tables
+			$this->left->tables,
+			$this->right->tables
 		);
 
 		foreach ( $iterator as $entry ) {
@@ -118,12 +116,14 @@ class tsDBSync
 
 			$entry->left->sync( $entry->right );
 		}
+
+		$this->close();
 	}
 
-	public static function close()
+	public function close()
 	{
-		self::$left = null;
-		self::$right = null;
+		$this->left = null;
+		$this->right = null;
 	}
 }
 

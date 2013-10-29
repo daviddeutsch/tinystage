@@ -224,6 +224,16 @@ class tsDBTableIterator extends ArrayIterator
 
 		return false;
 	}
+
+	public function equalTime( tsDBTableIterator $other )
+	{
+		return $this->current()->update_time == $other->current()->update_time;
+	}
+
+	public function hasUpdate()
+	{
+		return $this->current()->update_time > TinyStage::$last_update;
+	}
 }
 
 class tsDBSyncIterator implements Iterator
@@ -288,15 +298,11 @@ class tsDBSyncIterator implements Iterator
 	private function hasUpdates()
 	{
 		// Check whether there actually are any recent changes
-		if ( $this->l->current()->update_time == $this->r->current()->update_time ) {
+		if ( $this->l->equalTime($this->r) ) {
 			return false;
 		}
 
-		// Check whether the updates happened since the last TinyStage Update
-		if (
-			( $this->l->current()->update_time > TinyStage::$last_update )
-			|| ( $this->r->current()->update_time > TinyStage::$last_update )
-		) {
+		if ( $this->l->hasUpdate() || $this->r->hasUpdate() ) {
 			return true;
 		}
 

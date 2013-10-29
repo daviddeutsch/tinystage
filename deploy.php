@@ -67,11 +67,11 @@ class TinyStage
 
 	private static function syncDB()
 	{
-		TinyStageDBSync::setup( self::$config->db );
+		tsDBSync::setup( self::$config->db );
 
-		TinyStageDBSync::sync();
+		tsDBSync::sync();
 
-		TinyStageDBSync::close();
+		tsDBSync::close();
 	}
 
 	private static function authError()
@@ -80,7 +80,7 @@ class TinyStage
 	}
 }
 
-class TinyStageDBSync
+class tsDBSync
 {
 	/**
 	 * @var stdClass
@@ -88,27 +88,27 @@ class TinyStageDBSync
 	private static $config;
 
 	/**
-	 * @var TinyStageDB
+	 * @var tsDB
 	 */
 	private static $left;
 
 	/**
-	 * @var TinyStageDB
+	 * @var tsDB
 	 */
 	private static $right;
 
 	public static function setup( $config )
 	{
-		self::$left = new TinyStageDB( $config->left );
+		self::$left = new tsDB( $config->left );
 
-		self::$right = new TinyStageDB( $config->right );
+		self::$right = new tsDB( $config->right );
 
 		self::$config = $config;
 	}
 
 	public static function sync()
 	{
-		$iterator = new TinyStageDBSyncIterator(
+		$iterator = new tsDBSyncIterator(
 			self::$left->tables,
 			self::$right->tables
 		);
@@ -116,7 +116,7 @@ class TinyStageDBSync
 		foreach ( $iterator as $entry ) {
 			if ( !$iterator->valid() ) continue;
 
-			TinyStageDBTableSync::sync( $entry->left, $entry->right );
+			tsDBTableSync::sync( $entry->left, $entry->right );
 		}
 	}
 
@@ -127,10 +127,10 @@ class TinyStageDBSync
 			return false;
 		}
 
-		// Check whether the updates happened since the last TinyStage Update
+		// Check whether the updates happened since the last ts Update
 		if (
-			( $left->update_time > TinyStage::$last_update )
-			|| ( $right->update_time > TinyStage::$last_update )
+			( $left->update_time > ts::$last_update )
+			|| ( $right->update_time > ts::$last_update )
 		) {
 			return true;
 		}
@@ -145,7 +145,7 @@ class TinyStageDBSync
 	}
 }
 
-class TinyStageDB extends PDO
+class tsDB extends PDO
 {
 	/**
 	 * @var string
@@ -153,7 +153,7 @@ class TinyStageDB extends PDO
 	private $name;
 
 	/**
-	 * @var TinyStageDBTableIterator
+	 * @var tsDBTableIterator
 	 */
 	public $tables;
 
@@ -168,7 +168,7 @@ class TinyStageDB extends PDO
 			array(PDO::ATTR_PERSISTENT => true)
 		);
 
-		$this->tables = new TinyStageDBTableIterator( $this );
+		$this->tables = new tsDBTableIterator( $this );
 	}
 
 	public function getTableStatus()
@@ -204,12 +204,12 @@ class TinyStageDB extends PDO
 	}
 }
 
-class TinyStageDBTableIterator extends ArrayIterator
+class tsDBTableIterator extends ArrayIterator
 {
-	public function __construct( TinyStageDB $db, $converted=array() )
+	public function __construct( tsDB $db, $converted=array() )
 	{
 		foreach ( self::$db->getTableStatus() as $table ) {
-			$converted[] = new TinyStageDBTable( $table, $db );
+			$converted[] = new tsDBTable( $table, $db );
 		}
 
 		parent::__construct( $converted );
@@ -244,15 +244,15 @@ class TinyStageDBTableIterator extends ArrayIterator
 	}
 }
 
-class TinyStageDBSyncIterator implements Iterator
+class tsDBSyncIterator implements Iterator
 {
 	/**
-	 * @var TinyStageDBTableIterator
+	 * @var tsDBTableIterator
 	 */
 	private $left;
 
 	/**
-	 * @var TinyStageDBTableIterator
+	 * @var tsDBTableIterator
 	 */
 	private $right;
 
@@ -312,8 +312,8 @@ class TinyStageDBSyncIterator implements Iterator
 
 		// Check whether the updates happened since the last TinyStage Update
 		if (
-			( $this->left->current()->update_time > TinyStage::$last_update )
-			|| ( $this->right->current()->update_time > TinyStage::$last_update )
+			( $this->left->current()->update_time > ts::$last_update )
+			|| ( $this->right->current()->update_time > ts::$last_update )
 		) {
 			return true;
 		}
@@ -322,9 +322,9 @@ class TinyStageDBSyncIterator implements Iterator
 	}
 }
 
-class TinyStageDBTableSync
+class tsDBTableSync
 {
-	public static function sync( TinyStageDBTable $left, TinyStageDBTable $right )
+	public static function sync( tsDBTable $left, tsDBTable $right )
 	{
 		if ( !$left::$select->execute() ) return;
 
@@ -351,7 +351,7 @@ class TinyStageDBTableSync
 	}
 }
 
-class TinyStageDBTable
+class tsDBTable
 {
 	/**
 	 * @var string
@@ -383,7 +383,7 @@ class TinyStageDBTable
 	 */
 	public static $tableId;
 
-	public function __construct( $data, TinyStageDB $db )
+	public function __construct( $data, tsDB $db )
 	{
 		foreach ( $data as $k => $v ) {
 			$this->{strtolower($k)} = $v;
@@ -414,7 +414,7 @@ class TinyStageDBTable
 		return array_shift(self::$tableFields)['Field'];
 	}
 
-	private function getFields( TinyStageDB $db )
+	private function getFields( tsDB $db )
 	{
 		return $db->query('describe '.$this->name, PDO::FETCH_OBJ)->fetch();
 	}
